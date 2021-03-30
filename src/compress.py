@@ -67,7 +67,7 @@ def compress(dt):
 					j+=i*64
 					t[j][0]+=1
 					if (t[j][0]>=SIZEOF_UINT64_T*8):
-						print("Encoding won't fit in 'uint64_t'!")
+						print("Encoding won't fit in 64-bit integer!")
 						return None
 					if (t[j][0]>mx):
 						mx=t[j][0]
@@ -81,7 +81,7 @@ def compress(dt):
 					t[j][1]|=(1<<t[j][0])
 					t[j][0]+=1
 					if (t[j][0]>=SIZEOF_UINT64_T*8):
-						print("Encoding won't fit in 'uint64_t'!")
+						print("Encoding won't fit in 64-bit integer!")
 						return None
 					if (t[j][0]>mx):
 						mx=t[j][0]
@@ -115,12 +115,16 @@ def compress(dt):
 	bfl=0
 	for e in dt:
 		e=t[e]
-		bf=(bf<<e[0])|e[1]
-		bf&=0xffffffffffffffff
-		bfl+=e[0]
-		while (bfl>=8):
-			bfl-=8
-			o+=[(bf>>bfl)&0xff]
+		i=e[0]
+		while (i>0):
+			j=(16 if i>16 else i)
+			i-=j
+			bf=(bf<<j)|((e[1]>>i)&0xffff)
+			bf&=0xffffffff
+			bfl+=j
+			while (bfl>=8):
+				bfl-=8
+				o+=[(bf>>bfl)&0xff]
 	if (bfl!=0):
 		o+=[(bf<<(8-bfl))&0xff]
 	return bytes(o)
@@ -131,7 +135,8 @@ def decompress(dt):
 	f=dt[0]
 	ol=f>>4
 	i=1
-	t=tuple([] for _ in range(0,((f&0x0f)+1)*4))
+	tl=((f&0x0f)+1)*4
+	t=tuple([] for _ in range(0,tl))
 	for j in range(0,256):
 		l=dt[i]
 		i+=1
@@ -143,6 +148,12 @@ def decompress(dt):
 			v=(v<<8)|dt[i]
 			i+=1
 		t[k].append((v,j))
+	ti=[0 for _ in range(0,tl+1)]
+	for j in range(0,tl+1):
+		k=j+1
+		while (k<tl+1 and (k==0 or len(t[k-1])==0)):
+			k+=1
+		ti[j]=k-j
 	o=[]
 	bf=0
 	bfl=0
@@ -155,9 +166,12 @@ def decompress(dt):
 			e=dt[i]
 			j=8
 			i+=1
-		j-=1
-		bf=(bf<<1)|((e>>j)&1)
-		bfl+=1
+		k=ti[bfl]
+		if (k>j):
+			k=j
+		j-=k
+		bf=(bf<<k)|((e>>j)&((1<<k)-1))
+		bfl+=k
 		for k in t[bfl-1]:
 			if (k[0]==bf):
 				o+=[k[1]]
