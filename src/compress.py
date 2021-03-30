@@ -1,17 +1,17 @@
-SIZEOF_UINT16_T=2
+SIZEOF_UINT64_T=8
+
+
+
+def bit_scan_forward(v):
+	i=0
+	while ((v&1)==0):
+		i+=1
+		v>>=1
+	return i
 
 
 
 def compress(dt):
-	def _less(a,b):
-		if (a[0]!=b[0]):
-			return a[0]<b[0]
-		for i in range(0,len(a[1])):
-			if (i==len(b[1])):
-				return False
-			if (a[1][i]!=b[1][i]):
-				return a[1][i]<b[1][i]
-		return len(a[1])<len(b[1])
 	fl={}
 	for e in dt:
 		if (e not in fl):
@@ -19,6 +19,7 @@ def compress(dt):
 		else:
 			fl[e]+=1
 	t=tuple([0,0] for _ in range(0,256))
+	mx=0
 	if (len(fl)==1):
 		k=list(fl.keys())[0]
 		t[k][0]=1
@@ -27,11 +28,12 @@ def compress(dt):
 		ql=0
 		for c,f in fl.items():
 			ql+=1
-			e=(f,bytes([c]))
+			e=[f,0,0,0,0]
+			e[c//64+1]|=1<<(c%64)
 			i=ql-1
 			while (i>0):
 				pi=(i-1)>>1
-				if (_less(e,q[pi])):
+				if (((e[0]<q[pi][0]) if e[0]!=q[pi][0] else (e[1]<q[pi][1] or e[2]<q[pi][2] or e[3]<q[pi][3] or e[4]<q[pi][4]))):
 					q[i]=q[pi]
 					i=pi
 					continue
@@ -44,63 +46,77 @@ def compress(dt):
 			i=0
 			ci=1
 			while (ci<ql):
-				if (ci+1<ql and not _less(q[ci],q[ci+1])):
+				if (ci+1<ql and ((q[ci][0]>=q[ci+1][0]) if q[ci][0]!=q[ci+1][0] else (q[ci][1]>=q[ci+1][1] or q[ci][2]>=q[ci+1][2] or q[ci][3]>=q[ci+1][3] or q[ci][4]>=q[ci+1][4]))):
 					ci+=1
 				q[i]=q[ci]
 				i=ci
 				ci=(i<<1)+1
 			while (i>0):
 				pi=(i-1)>>1
-				if (_less(e,q[pi])):
+				if (((e[0]<q[pi][0]) if e[0]!=q[pi][0] else (e[1]<q[pi][1] or e[2]<q[pi][2] or e[3]<q[pi][3] or e[4]<q[pi][4]))):
 					q[i]=q[pi]
 					i=pi
 					continue
 				break
 			q[i]=e
+			for i in range(4):
+				e=ea[i+1]
+				while (e!=0):
+					j=bit_scan_forward(e)
+					e&=~(1<<j)
+					j+=i*64
+					t[j][0]+=1
+					if (t[j][0]>=SIZEOF_UINT64_T*8):
+						print("Encoding won't fit in 'uint64_t'!")
+						return None
+					if (t[j][0]>mx):
+						mx=t[j][0]
 			eb=q[0]
-			for k in ea[1]:
-				t[k][0]+=1
-				if (t[k][0]>=SIZEOF_UINT16_T*8):
-					print("Encoding won't fit in 'uint16_t'!")
-					return None
-			for k in eb[1]:
-				t[k][1]|=(1<<t[k][0])
-				t[k][0]+=1
-				if (t[k][0]>=SIZEOF_UINT16_T*8):
-					print("Encoding won't fit in 'uint16_t'!")
-					return None
+			for i in range(4):
+				e=eb[i+1]
+				while (e!=0):
+					j=bit_scan_forward(e)
+					e&=~(1<<j)
+					j+=i*64
+					t[j][1]|=(1<<t[j][0])
+					t[j][0]+=1
+					if (t[j][0]>=SIZEOF_UINT64_T*8):
+						print("Encoding won't fit in 'uint64_t'!")
+						return None
+					if (t[j][0]>mx):
+						mx=t[j][0]
 			if (ql==1):
 				break
-			e=(ea[0]+eb[0],bytes(sorted(ea[1]+eb[1])))
+			e=(ea[0]+eb[0],ea[1]|eb[1],ea[2]|eb[2],ea[3]|eb[3],ea[4]|eb[4])
 			i=0
 			ci=1
 			while (ci<ql):
-				if (ci+1<ql and not _less(q[ci],q[ci+1])):
+				if (ci+1<ql and ((q[ci][0]>=q[ci+1][0]) if q[ci][0]!=q[ci+1][0] else (q[ci][1]>=q[ci+1][1] or q[ci][2]>=q[ci+1][2] or q[ci][3]>=q[ci+1][3] or q[ci][4]>=q[ci+1][4]))):
 					ci+=1
 				q[i]=q[ci]
 				i=ci
 				ci=(i<<1)+1
 			while (i>0):
 				pi=(i-1)>>1
-				if (_less(e,q[pi])):
+				if (((e[0]<q[pi][0]) if e[0]!=q[pi][0] else (e[1]<q[pi][1] or e[2]<q[pi][2] or e[3]<q[pi][3] or e[4]<q[pi][4]))):
 					q[i]=q[pi]
 					i=pi
 					continue
 				break
 			q[i]=e
-	o=[len(dt)&0xff]
+	o=[((len(dt)&0x0f)<<4)|((mx+3)//4-1)]
 	for i in range(0,256):
 		o+=[t[i][0]]
-		if (t[i][0]>8):
-			o+=[t[i][1]>>8,t[i][1]&0xff]
-		elif (t[i][0]>0):
-			o+=[t[i][1]]
+		j=((t[i][0]+7)//8)*8
+		while (j!=0):
+			j-=8
+			o+=[(t[i][1]>>j)&0xff]
 	bf=0
 	bfl=0
 	for e in dt:
 		e=t[e]
 		bf=(bf<<e[0])|e[1]
-		bf&=0xffffff
+		bf&=0xffffffffffffffff
 		bfl+=e[0]
 		while (bfl>=8):
 			bfl-=8
@@ -112,18 +128,21 @@ def compress(dt):
 
 
 def decompress(dt):
-	ol=dt[0]
+	f=dt[0]
+	ol=f>>4
 	i=1
-	t=tuple([] for _ in range(0,15))
+	t=tuple([] for _ in range(0,((f&0x0f)+1)*4))
 	for j in range(0,256):
 		l=dt[i]
 		i+=1
-		if (l>8):
-			t[l-1].append(((dt[i]<<8)|dt[i+1],j))
-			i+=2
-		elif (l>0):
-			t[l-1].append((dt[i],j))
+		k=l-1
+		l=(l+7)//8
+		v=0
+		while (l):
+			l-=1
+			v=(v<<8)|dt[i]
 			i+=1
+		t[k].append((v,j))
 	o=[]
 	bf=0
 	bfl=0
@@ -145,6 +164,6 @@ def decompress(dt):
 				bf=0
 				bfl=0
 				break
-		if (i>=len(dt)-2 and len(o)&0xff==ol):
+		if (i>=len(dt)-1 and len(o)&0x0f==ol):
 			break
 	return bytes(o)
