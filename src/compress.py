@@ -19,7 +19,7 @@ def compress(dt):
 		else:
 			fl[e]+=1
 	t=tuple([0,0] for _ in range(0,256))
-	mx=0
+	mx=1
 	if (len(fl)==1):
 		k=list(fl.keys())[0]
 		t[k][0]=1
@@ -132,22 +132,21 @@ def compress(dt):
 
 
 def decompress(dt):
-	f=dt[0]
-	ol=f>>4
 	i=1
-	tl=((f&0x0f)+1)*4
+	tl=((dt[0]&0x0f)+1)*4
 	t=tuple([] for _ in range(0,tl))
 	for j in range(0,256):
 		l=dt[i]
 		i+=1
-		k=l-1
-		l=(l+7)//8
-		v=0
-		while (l):
-			l-=1
-			v=(v<<8)|dt[i]
-			i+=1
-		t[k].append((v,j))
+		if (l>0):
+			k=l-1
+			l=(l+7)//8
+			v=0
+			while (l):
+				l-=1
+				v=(v<<8)|dt[i]
+				i+=1
+			t[k].append((v,j))
 	ti=[0 for _ in range(0,tl+1)]
 	for j in range(0,tl+1):
 		k=j+1
@@ -159,13 +158,14 @@ def decompress(dt):
 	bfl=0
 	j=0
 	e=0
+	ol=dt[0]>>4
 	while (True):
 		if (j==0):
 			if (i==len(dt)):
 				break
 			e=dt[i]
-			j=8
 			i+=1
+			j=8
 		k=ti[bfl]
 		if (k>j):
 			k=j
@@ -178,6 +178,6 @@ def decompress(dt):
 				bf=0
 				bfl=0
 				break
-		if (i>=len(dt)-1 and len(o)&0x0f==ol):
+		if (i==len(dt) and len(o)&0x0f==ol):
 			break
 	return bytes(o)

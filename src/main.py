@@ -2,7 +2,7 @@ import compress
 
 
 
-with open("test.txt","rb") as f:
+with open("rsrc/test.txt","rb") as f:
 	dt=f.read()
 	c_dt=compress.compress(dt)
 	print(f"{len(dt):,} -> {len(c_dt):,} ({-(len(dt)-len(c_dt))/len(dt)*100:+.2f}%)")
