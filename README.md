@@ -1,1 +1,1 @@
-# Python - Deflate Compression
+# Python - Compression
